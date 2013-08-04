@@ -1,0 +1,237 @@
+Grammar
+
+    0 $accept: hive $end
+
+    1 hive: bind ARROW bind SEMI hive
+    2     | bind ARROW bind SEMI
+
+    3 bind: symbol bind
+    4     | symbol
+
+    5 symbol: symb BEG symbolist END
+    6       | symb
+
+    7 symbolist: symb COMA symbolist
+    8          | symb
+
+    9 symb: SYMBOL DOT VARIABLE
+   10     | SYMBOL DOT SYMBOL
+
+
+Terminals, with rules where they appear
+
+$end (0) 0
+error (256)
+SYMBOL (258) 9 10
+VARIABLE (259) 9
+DOT (260) 9 10
+ARROW (261) 1 2
+BEG (262) 5
+END (263) 5
+COMA (264) 7
+SEMI (265) 1 2
+
+
+Nonterminals, with rules where they appear
+
+$accept (11)
+    on left: 0
+hive (12)
+    on left: 1 2, on right: 0 1
+bind (13)
+    on left: 3 4, on right: 1 2 3
+symbol (14)
+    on left: 5 6, on right: 3 4
+symbolist (15)
+    on left: 7 8, on right: 5 7
+symb (16)
+    on left: 9 10, on right: 5 6 7 8
+
+
+state 0
+
+    0 $accept: . hive $end
+
+    SYMBOL  shift, and go to state 1
+
+    hive    go to state 2
+    bind    go to state 3
+    symbol  go to state 4
+    symb    go to state 5
+
+
+state 1
+
+    9 symb: SYMBOL . DOT VARIABLE
+   10     | SYMBOL . DOT SYMBOL
+
+    DOT  shift, and go to state 6
+
+
+state 2
+
+    0 $accept: hive . $end
+
+    $end  shift, and go to state 7
+
+
+state 3
+
+    1 hive: bind . ARROW bind SEMI hive
+    2     | bind . ARROW bind SEMI
+
+    ARROW  shift, and go to state 8
+
+
+state 4
+
+    3 bind: symbol . bind
+    4     | symbol .
+
+    SYMBOL  shift, and go to state 1
+
+    $default  reduce using rule 4 (bind)
+
+    bind    go to state 9
+    symbol  go to state 4
+    symb    go to state 5
+
+
+state 5
+
+    5 symbol: symb . BEG symbolist END
+    6       | symb .
+
+    BEG  shift, and go to state 10
+
+    $default  reduce using rule 6 (symbol)
+
+
+state 6
+
+    9 symb: SYMBOL DOT . VARIABLE
+   10     | SYMBOL DOT . SYMBOL
+
+    SYMBOL    shift, and go to state 11
+    VARIABLE  shift, and go to state 12
+
+
+state 7
+
+    0 $accept: hive $end .
+
+    $default  accept
+
+
+state 8
+
+    1 hive: bind ARROW . bind SEMI hive
+    2     | bind ARROW . bind SEMI
+
+    SYMBOL  shift, and go to state 1
+
+    bind    go to state 13
+    symbol  go to state 4
+    symb    go to state 5
+
+
+state 9
+
+    3 bind: symbol bind .
+
+    $default  reduce using rule 3 (bind)
+
+
+state 10
+
+    5 symbol: symb BEG . symbolist END
+
+    SYMBOL  shift, and go to state 1
+
+    symbolist  go to state 14
+    symb       go to state 15
+
+
+state 11
+
+   10 symb: SYMBOL DOT SYMBOL .
+
+    $default  reduce using rule 10 (symb)
+
+
+state 12
+
+    9 symb: SYMBOL DOT VARIABLE .
+
+    $default  reduce using rule 9 (symb)
+
+
+state 13
+
+    1 hive: bind ARROW bind . SEMI hive
+    2     | bind ARROW bind . SEMI
+
+    SEMI  shift, and go to state 16
+
+
+state 14
+
+    5 symbol: symb BEG symbolist . END
+
+    END  shift, and go to state 17
+
+
+state 15
+
+    7 symbolist: symb . COMA symbolist
+    8          | symb .
+
+    COMA  shift, and go to state 18
+
+    $default  reduce using rule 8 (symbolist)
+
+
+state 16
+
+    1 hive: bind ARROW bind SEMI . hive
+    2     | bind ARROW bind SEMI .
+
+    SYMBOL  shift, and go to state 1
+
+    $default  reduce using rule 2 (hive)
+
+    hive    go to state 19
+    bind    go to state 3
+    symbol  go to state 4
+    symb    go to state 5
+
+
+state 17
+
+    5 symbol: symb BEG symbolist END .
+
+    $default  reduce using rule 5 (symbol)
+
+
+state 18
+
+    7 symbolist: symb COMA . symbolist
+
+    SYMBOL  shift, and go to state 1
+
+    symbolist  go to state 20
+    symb       go to state 15
+
+
+state 19
+
+    1 hive: bind ARROW bind SEMI hive .
+
+    $default  reduce using rule 1 (hive)
+
+
+state 20
+
+    7 symbolist: symb COMA symbolist .
+
+    $default  reduce using rule 7 (symbolist)
