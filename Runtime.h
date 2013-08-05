@@ -5,7 +5,6 @@ int initRuntime(char* file);
 
 struct Node 	{
 		char* name;
-		struct PropagatorList* receive ;
 		struct PropagatorList* connected ;
 		struct Node* next;
 		};

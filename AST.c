@@ -12,7 +12,8 @@
 
 struct Arrow* topnode = NULL;
 
-regex_t regex;
+regex_t injection;
+regex_t query;
 
 void null(struct Arrow* arr);
 void scrapeNodes(struct Symbol* symb);
@@ -25,7 +26,6 @@ void initPropagatorRing();
 void* threadMain(void* param);
 int bind(struct Propagator* prop,struct NodeValue* synapse);
 int transmit(struct Propagator* propagator,struct NodeValue* transmiter);
-int feedback(struct Propagator* propagator,struct NodeValue* transmiter);
 void repl();
 void lineParse(char * line);
 void inject(char* node, char* value);
@@ -47,14 +47,17 @@ void main(){
 	initPropagatorRing();
 	int i;	
 	
-//	for (i = 0; i<10; i++) {
-//		pthread_create(&executers[i], NULL, &threadMain, NULL);	
-//	}
-//	if (regcomp(&regex, "(\\w+)\\.(\\w+)",REG_EXTENDED)) {
-//		fprintf(stderr, "Could not compile regex\n"); exit(1); 
-//	}
-	inject("x","up");
-	threadMain(NULL);
+	for (i = 0; i<1; i++) {
+		pthread_create(&executers[i], NULL, &threadMain, NULL);	
+	}
+	if (regcomp(&injection, "(\\w+)\\.(\\w+)",REG_EXTENDED)) {
+		fprintf(stderr, "Could not compile regex\n"); exit(1); 
+	}if (regcomp(&query, "(\\w+)?",REG_EXTENDED)) {
+		fprintf(stderr, "Could not compile regex\n"); exit(1); 
+	}
+	inject("mother1","Z");
+
+	inject("mother2","adam");
 	repl();
 }
 
@@ -70,16 +73,17 @@ void repl(){
 
 void lineParse(char * line){
 	regmatch_t matches[5];
-	if(regexec(&regex,line,5,&matches,0)){
+	if(regexec(&injection,line,5,&matches,0)){
 		printf("not understood");
 		return;
+	}else{
+		line[matches[1].rm_eo]='\0'; 
+		line[matches[2].rm_eo]='\0'; 
+		char * node = line+matches[1].rm_so;
+		char * value = line+matches[2].rm_so;	
+		printf("%s injected with value %s",node,value);
+		inject(node,value);
 	}
-	line[matches[1].rm_eo]='\0'; 
-	line[matches[2].rm_eo]='\0'; 
-	char * node = line+matches[1].rm_so;
-	char * value = line+matches[2].rm_so;	
-	printf("%s injected with value %s",node,value);
-	inject(node,value);
 }
 
 void inject(char* node, char * value){
@@ -102,6 +106,17 @@ void inject(char* node, char * value){
 					break;
 				}
 			}
+			for(iterSyn=iterDep->ref->transmit; iterSyn; iterSyn = iterSyn->next){
+				if(nodeptr == iterSyn->node){
+					struct Valuelist *needle;
+					needle = (struct Valuelist*)malloc(sizeof(struct Valuelist));
+					memset(needle, 0 , sizeof(struct Valuelist));
+					needle->value = value; //change for reflexivity
+					needle-> next = iterSyn->values;
+					iterSyn->values = needle;
+					break;
+				}
+			}
 			pthread_mutex_unlock(&iterDep->ref->runLock);		
 		}
 }
@@ -111,23 +126,19 @@ void initPropagatorRing(){
 	for(iter = PTABLE ; iter !=NULL; iter = iter->next){
 		struct NodeValue* iterNode;
 		for (iterNode=iter->synapse; iterNode; iterNode = iterNode->next){
-			struct PropagatorList* iterDep,*needle;
-			for (iterDep=iterNode->node->connected;iterDep;iterDep=iterDep->next);
-			iterDep; // now the last node
+			struct PropagatorList* needle;
 			needle = (struct PropagatorList*) malloc(sizeof(struct PropagatorList));
 			memset(needle, 0 , sizeof(struct PropagatorList));
-			needle-> next = iterDep;
 			needle->ref = iter;
+			needle-> next = iterNode->node->connected;
 			iterNode->node->connected = needle;
 		}for (iterNode=iter->transmit; iterNode; iterNode = iterNode->next){
-			struct PropagatorList* iterDep,*needle;
-			for (iterDep=iterNode->node->receive;iterDep;iterDep=iterDep->next);
-			iterDep; // now the last node
+			struct PropagatorList* needle;
 			needle = (struct PropagatorList*) malloc(sizeof(struct PropagatorList));
 			memset(needle, 0 , sizeof(struct PropagatorList));
-			needle-> next = iterDep;
 			needle->ref = iter;
-			iterNode->node->receive = needle;
+			needle-> next = iterNode->node->connected;
+			iterNode->node->connected = needle;
 		}
 		last = iter;
 	}
@@ -144,8 +155,9 @@ void* threadMain(void* param){
 		if (bind(proc, proc->synapse)){
 			pthread_mutex_unlock(&proc->runLock);  // never hold two locks!
 			binder++;
-			printf("# %lu \n",binder);
+			printf(" => ");
 			transmit(proc,proc->transmit);		// acquires other lock.
+			printf("\n");
 			
 		}else{
 			pthread_mutex_unlock(&proc->runLock);   // otherwise, release lock anyways.
@@ -155,8 +167,9 @@ void* threadMain(void* param){
 		if (bind(proc, proc->transmit)){
 			pthread_mutex_unlock(&proc->runLock);  // never hold two locks!
 			binder++;
-			printf("# %lu \n",binder);
-			feedback(proc,proc->synapse);		// acquires other lock.
+			printf(" => ");
+			transmit(proc,proc->synapse);		// acquires other lock.
+			printf("\n");
 			
 		}else{
 			pthread_mutex_unlock(&proc->runLock);   // otherwise, release lock anyways.
@@ -174,7 +187,11 @@ int bind(struct Propagator* propagator,struct NodeValue* synapse){
 		struct Valuelist* valiter;
 		bool bound=false;
 		for (valiter=iter->values; valiter; valiter = valiter->next){
-			if (iter->isVar || (!strcmp(iter->bindsTo,valiter->value))){
+			if (iter->isVar ||(!strcmp(iter->bindsTo,valiter->value))){
+				bound = true;
+				break;
+			}
+			else if (isupper((int)*valiter->value))  { //transmit VARAIBLE
 				bound = true;
 				break;
 			}
@@ -182,14 +199,18 @@ int bind(struct Propagator* propagator,struct NodeValue* synapse){
 		if (!bound)
 			return 0;
 	}
+	printf("BIND: " );
 	for (iter=synapse; iter; iter = iter->next){
+		printf(" %s.%s",iter->node->name,iter->values->value);
 		struct Valuelist* valiter, *last;
 		last=NULL;
 		for (valiter=iter->values; valiter; valiter = valiter->next){
-			if (iter->isVar || (!strcmp(iter->bindsTo,valiter->value))){
-				char *valuename = iter->node->name;
+			if (iter->isVar || (!strcmp(iter->bindsTo,valiter->value)) || isupper((int)*valiter->value)){
 				if(iter->isVar){ //is variable!
-					registerVariable(propagator,valuename,valiter->value);
+					registerVariable(propagator,iter->bindsTo,valiter->value);
+				}
+				if (isupper((int)*valiter->value))  { //transmit VARAIBLE
+					registerVariable(propagator, iter->bindsTo,valiter->value);
 				}
 				if (!last){
 					iter->values = valiter->next;
@@ -197,7 +218,7 @@ int bind(struct Propagator* propagator,struct NodeValue* synapse){
 					last->next= valiter->next;
 				}
 				free(valiter);
-				continue;
+				break;
 			}
 			last=valiter;
 			
@@ -217,8 +238,8 @@ void registerVariable(struct Propagator* prop, char* name, char*value){
 	iter = (struct VariableMap*) malloc(sizeof(struct VariableMap));
 	iter->name = name;
 	iter->value = value;
-	iter->next = (prop->variables)? prop->variables->next : NULL;
-	prop->variables = iter->next;
+	iter->next = prop->variables ;
+	prop->variables = iter;
 	return; 
 }
 char* acquireVariable(struct Propagator* prop, char* name){
@@ -227,13 +248,16 @@ char* acquireVariable(struct Propagator* prop, char* name){
 		if(!strcmp(iter->name,name)){
 			return iter->value;
 		}
-	}	
+	}
+	return NULL;	
 }
 
 int transmit(struct Propagator* propagator,struct NodeValue* transmiter){
 	struct NodeValue* iter;
 	for (iter = transmiter; iter ; iter = iter->next) {
+		char* tmp;
 		struct PropagatorList* iterDep;
+		printf("%s.%s ",iter->node->name ,  (iter->values && iter->values->value)? acquireVariable(propagator, iter->bindsTo): iter->bindsTo );
 		for(iterDep = iter->node->connected; iterDep; iterDep = iterDep->next){
 			if (iterDep->ref == propagator)
 				continue;
@@ -244,8 +268,11 @@ int transmit(struct Propagator* propagator,struct NodeValue* transmiter){
 					struct Valuelist *needle;
 					needle = (struct Valuelist*)malloc(sizeof(struct Valuelist));
 					memset(needle, 0 , sizeof(struct Valuelist));
-					if(iter->isVar){
-						needle->value = acquireVariable(propagator,iter->node->name);
+					char* variable = acquireVariable(propagator, iter->bindsTo);
+					if (variable){
+						needle->value= variable;
+					}else if(iter->isVar){
+						needle->value = acquireVariable(propagator,iter->bindsTo);
 					}else{
 						needle->value = iter->bindsTo; //change for reflexivity
 					}
@@ -254,26 +281,16 @@ int transmit(struct Propagator* propagator,struct NodeValue* transmiter){
 					break;
 				}
 			}
-			pthread_mutex_unlock(&iterDep->ref->runLock);		
-		}
-	}
-}
-int feedback(struct Propagator* propagator,struct NodeValue* transmiter){
-	struct NodeValue* iter;
-	for (iter = transmiter; iter ; iter = iter->next) {
-		struct PropagatorList* iterDep;
-		for(iterDep = iter->node->receive; iterDep; iterDep = iterDep->next){	
-			if (iterDep->ref == propagator)
-				continue;
-			pthread_mutex_lock(&iterDep->ref->runLock);
-			struct NodeValue* iterSyn;
-			for(iterSyn=iterDep->ref->synapse; iterSyn; iterSyn = iterSyn->next){
+			for(iterSyn=iterDep->ref->transmit; iterSyn; iterSyn = iterSyn->next){
 				if(iter->node == iterSyn->node){
 					struct Valuelist *needle;
 					needle = (struct Valuelist*)malloc(sizeof(struct Valuelist));
 					memset(needle, 0 , sizeof(struct Valuelist));
-					if(iter->isVar){
-						needle->value = acquireVariable(propagator,iter->node->name);
+					char* variable = acquireVariable(propagator, iter->bindsTo);
+					if (variable) {
+						needle->value = variable;
+					}else if(iter->isVar){
+						needle->value = acquireVariable(propagator,iter->bindsTo);
 					}else{
 						needle->value = iter->bindsTo; //change for reflexivity
 					}
@@ -338,6 +355,7 @@ struct NodeValue* generateSynapse(struct Symbol* s){
 		synapse->bindsTo = s->name;
 		synapse->isVar = 0;
 	}else{
+		synapse->bindsTo = s->name;
 		synapse->isVar = 1 ;
 	}
 	synapse->next = generateSynapse(s->children);

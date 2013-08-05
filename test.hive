@@ -1,3 +1,4 @@
-x.X => y.X ;
-y.X => y.X ;
-x.X => x.X ;
+adam.X => adam.adam;
+christi.X => christi.christi;
+
+adam.adam christi.christi => mother1.christi mother2.adam ;
