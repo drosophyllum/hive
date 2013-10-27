@@ -1,5 +1,5 @@
 Cm     = gcc
-CFLAGS = -g -O0 -std=gnu99 -pthread
+CFLAGS = -g -O0 -std=gnu99 -pthread 
 
 READLINE_LIB = ./readline-6.2/libreadline.a
 HISTORY_LIB = ./readline-6.2/libhistory.a

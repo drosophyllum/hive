@@ -9,6 +9,8 @@
 #include <regex.h>
 #include <signal.h>
 #include <time.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 
 struct Arrow* topnode = NULL;
 
@@ -18,15 +20,16 @@ regex_t query;
 void null(struct Arrow* arr);
 void scrapeNodes(struct Symbol* symb);
 void printAST(struct Arrow* arr);
-void printbind(struct Symbol* bind,bool list);
+void printbinds(struct Symbol* bind,bool list);
 void traverse(void (*arrow)(struct Arrow*) , void (*symbol)(struct Symbol*),struct Arrow* top);
 void traverseBind(void (*symbol)(struct Symbol*),struct Symbol* bind);
 void initPropagators(struct Arrow* top);
 void initPropagatorRing();
 void* threadMain(void* param);
-int bind(struct Propagator* prop,struct NodeValue* synapse);
+int binds(struct Propagator* prop,struct NodeValue* synapse);
 int transmit(struct Propagator* propagator,struct NodeValue* transmiter);
 void repl();
+void tcpServer();
 void lineParse(char * line);
 void inject(char* node, char* value);
 void registerVariable(struct Propagator* prop, char* name, char*value);
@@ -42,7 +45,7 @@ struct Node* lookupNode(char * name);
 pthread_t executers[10];
 
 void main(){
-        char *file = "test.hive";
+        char *file = "obama.hive";
         initRuntime(file);
 	initPropagatorRing();
 	int i;	
@@ -55,10 +58,47 @@ void main(){
 	}if (regcomp(&query, "(\\w+)?",REG_EXTENDED)) {
 		fprintf(stderr, "Could not compile regex\n"); exit(1); 
 	}
-	inject("mother1","Z");
+//	inject("mother1","Z");
 
-	inject("mother2","adam");
-	repl();
+//	inject("mother2","adam");
+//	repl();
+//
+	tcpServer();
+}
+
+void tcpServer(){
+   int listenfd,connfd,n;
+   struct sockaddr_in servaddr,cliaddr;
+   socklen_t clilen;
+   pid_t     childpid;
+   char mesg[1000];
+
+   listenfd=socket(AF_INET,SOCK_STREAM,0);
+
+   bzero(&servaddr,sizeof(servaddr));
+   servaddr.sin_family = AF_INET;
+   servaddr.sin_addr.s_addr=htonl(INADDR_ANY);
+   servaddr.sin_port=htons(7892);
+   bind(listenfd,(struct sockaddr *)&servaddr,sizeof(servaddr));
+
+   listen(listenfd,1024);
+
+   for(;;)
+   {
+      clilen=sizeof(cliaddr);
+      connfd = accept(listenfd,(struct sockaddr *)&cliaddr,&clilen);
+      close(listenfd);
+         for(;;)
+         {
+            n = recvfrom(connfd,mesg,1000,0,(struct sockaddr *)&cliaddr,&clilen);
+            sendto(connfd,mesg,n,0,(struct sockaddr *)&cliaddr,sizeof(cliaddr));
+            mesg[n] = '\n';
+	    mesg[n+1] = 0;
+	    lineParse(mesg);
+         }
+         
+      close(connfd);
+   }
 }
 
 
@@ -152,7 +192,7 @@ void* threadMain(void* param){
 	for(proc = PTABLE; proc ; proc= proc->next){ //ring 
 		if ( pthread_mutex_trylock(&proc->runLock) == EBUSY)
 			continue;
-		if (bind(proc, proc->synapse)){
+		if (binds(proc, proc->synapse)){
 			pthread_mutex_unlock(&proc->runLock);  // never hold two locks!
 			binder++;
 			printf(" => ");
@@ -164,7 +204,7 @@ void* threadMain(void* param){
 		}
 		if ( pthread_mutex_trylock(&proc->runLock) == EBUSY)
 			continue;
-		if (bind(proc, proc->transmit)){
+		if (binds(proc, proc->transmit)){
 			pthread_mutex_unlock(&proc->runLock);  // never hold two locks!
 			binder++;
 			printf(" => ");
@@ -181,7 +221,7 @@ void* threadMain(void* param){
 
 
 // add non determinism
-int bind(struct Propagator* propagator,struct NodeValue* synapse){
+int binds(struct Propagator* propagator,struct NodeValue* synapse){
 	struct NodeValue* iter;
 	for (iter=synapse; iter; iter = iter->next){
 		struct Valuelist* valiter;
@@ -387,20 +427,20 @@ struct Node* lookupNode(char* elem){
 void printAST(struct Arrow* arr){
 	struct Arrow* iter;
 	for(iter=arr; iter != NULL; iter=iter->next){
-	    printbind(arr->inBind,false);
+	    printbinds(arr->inBind,false);
 	    printf(" => ");
-	    printbind(arr->outBind,false);
+	    printbinds(arr->outBind,false);
 	    printf("\n");
 	}	
 }
 
-void printbind(struct Symbol* bind,bool list){
+void printbinds(struct Symbol* bind,bool list){
 	struct Symbol* iter;
 	for(iter=bind; iter != NULL; iter=iter->next){
 		printf("%s.%s ",iter->node,iter->name);
 		if (iter->children){
 			printf("(");
-			printbind(iter->children,true);
+			printbinds(iter->children,true);
 			printf(")");
 		}
 		if (list && iter->next){
